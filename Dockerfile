@@ -10,4 +10,4 @@ EXPOSE 80
 
 # RUN echo $(pwd)
 # RUN echo $(gunicorn -v)
-ENTRYPOINT ["gunicorn", "-b", ":8001", "main:APP"]
+ENTRYPOINT ["gunicorn", "-b", ":8080", "main:APP"]

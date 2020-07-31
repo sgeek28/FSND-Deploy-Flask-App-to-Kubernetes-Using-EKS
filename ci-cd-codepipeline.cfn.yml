@@ -9,7 +9,7 @@ Parameters:
   EksClusterName:
     Type: String
     Description: The name of the EKS cluster created
-    Default: jwt-simple-api
+    Default: simple-jwt-api
     MinLength: 1
     MaxLength: 100
     ConstraintDescription: You must enter the EKS cluster name
@@ -49,14 +49,14 @@ Parameters:
   CodeBuildDockerImage:
     Type: String
     Default: aws/codebuild/docker:17.09.0
-    Description: AWS CodeBuild Docker optimized image
+    Description: Default AWS CodeBuild Docker optimized image
     MinLength: 3
     MaxLength: 100
     ConstraintDescription: You must enter a CodeBuild Docker image
 
   KubectlRoleName:
     Type: String
-    Default: eksctl-jwt-simple-api-nodegroup-n-NodeInstanceRole-1LE0K3VQZUQLG
+    Default: UdacityFlaskDeployCBKubectlRole
     Description: IAM role used by kubectl to interact with EKS cluster
     MinLength: 3
     MaxLength: 100
@@ -87,19 +87,19 @@ Metadata:
           - EksClusterName
     ParameterLabels:
       GitHubUser:
-        default: sgeek28
+        default: Username
       GitHubToken:
         default: Access token
       GitSourceRepo:
-        default: FSND-Deploy-Flask-App-to-Kubernetes-Using-EKS
+        default: Repository
       GitBranch:
-        default: master
+        default: Branch
       CodeBuildDockerImage:
         default: Docker image
       KubectlRoleName:
-        default: eksctl-jwt-simple-api-nodegroup-n-NodeInstanceRole-1LE0K3VQZUQLG
+        default: kubectl IAM role
       EksClusterName:
-        default: jwt-simple-api
+        default: EKS cluster name
 
 
 Resources:
@@ -130,22 +130,18 @@ Resources:
               'LogicalResourceId': event['LogicalResourceId'],
               'Data': {"Message": "Resource creation successful!"},
             }
-
             client = boto3.client('iam')
             try:
               if event['RequestType'] == 'Create':
                 kubectl_role_name = event['ResourceProperties']['KubectlRoleName']
                 build_role_arn = event['ResourceProperties']['CodeBuildServiceRoleArn']
-
                 assume = client.get_role(RoleName = kubectl_role_name)
                 assume_doc = assume['Role']['AssumeRolePolicyDocument']
                 roles = [ { 'Effect': 'Allow', 'Principal': { 'AWS': build_role_arn }, 'Action': 'sts:AssumeRole' } ]
-
                 for statement in assume_doc['Statement']:
                   if 'AWS' in statement['Principal']:
                     if statement['Principal']['AWS'].startswith('arn:aws:iam:'):
                       roles.append(statement)
-
                 assume_doc['Statement'] = roles
                 update_response = client.update_assume_role_policy(RoleName = kubectl_role_name, PolicyDocument = json.dumps(assume_doc))
             except Exception as e:
@@ -153,12 +149,10 @@ Resources:
               response['Status'] = 'FAILED'
               response["Reason"] = e
               response['Data'] = {"Message": "Resource creation failed"}
-
             response_body = json.dumps(response)
             headers = {'content-type': '', "content-length": len(response_body) }
             put_response = requests.put(event['ResponseURL'], headers=headers, data=response_body)
             return response
-
       Handler: index.handler
       Role: !GetAtt CustomResourceLambdaExecutionRole.Arn
       Runtime: python2.7
@@ -324,7 +318,6 @@ Resources:
             Value: !Ref EksClusterName
           - Name: EKS_KUBECTL_ROLE_ARN
             Value: !Sub arn:aws:iam::${AWS::AccountId}:role/${KubectlRoleName}
-        PrivilegedMode: true
       Name: !Ref AWS::StackName
       ServiceRole: !GetAtt CodeBuildServiceRole.Arn
     DependsOn: KubectlAssumeRoleCustomResource
